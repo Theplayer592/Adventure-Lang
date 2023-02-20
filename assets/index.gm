@@ -12,10 +12,10 @@ var myArray = [
   max,
   "string inside",
   []
-]; # This is a comment
+] # This is a comment
 var myObj = {
   str: "test"
-};
+}
 while x < 5
   print "yay!"
   func()
