@@ -5,7 +5,7 @@
     "main": "index.js",
     "type": "module",
     "scripts": {
-        "test": "rm -r ./build && tsc && node build/index.js"
+        "test": "node util/rm.js && tsc && node build/index.js"
     },
     "keywords": [],
     "author": "",
