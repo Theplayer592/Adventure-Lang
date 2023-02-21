@@ -26,29 +26,30 @@ class Lexer {
     expr;
     rawTokens;
     tokens;
+    tokensNoEOL;
     i;
-    lexerRegex = /(null)|(true|false)|((\"(\\.|[^\"\\])*\")|(\'(\\.|[^'\\])*\'))|(([a-zA-Z][a-zA-Z0-9_]*)\s*(\((?:[^)(]+|\((?:[^)(]+|\([^)(]*\))*\))*\)))|(global|path|prompt|print|end|run|entity|property|value|max|min|create|spawn|kill|if|elif|else|while|var|const)|(\[([^]*)\])|(\{([^]*)\})|([a-zA-Z][a-zA-Z0-9_]*)|(\/\*[^*]*\*+(?:[^/*][^*]*\*+)*\/|#.*)|(==|!=|>=|<=|\*\*|&&|\|\||!|>|<|=|%|\+|-|\*)|([+\-]?([0-9]+([.][0-9]*)?|[.][0-9]+))|(\S+)/g;
+    lexerRegex = /(null)|(true|false)|((\"(\\.|[^\"\\])*\")|(\'(\\.|[^'\\])*\'))|(([a-zA-Z][a-zA-Z0-9_]*)\s*(\((?:[^)(]+|\((?:[^)(]+|\([^)(]*\))*\))*\)))|(global|path|prompt|print|end|run|entity|property|value|max|min|create|spawn|kill|if|elif|else|while|var|const)|(\[([^]*)\])|(\{([^]*)\})|([a-zA-Z][a-zA-Z0-9_]*)|(\/\*[^*]*\*+(?:[^/*][^*]*\*+)*\/|#.*)|(==|!=|>=|<=|\*\*|&&|\|\||!|>|<|=|%|\+|-|\*)|([+\-]?([0-9]+([.][0-9]*)?|[.][0-9]+))|(\S+)/gm;
     constructor(expression) {
         this.expr = expression;
-        this.i = -1;
+        this.i = 0;
     }
     getNext() {
         this.i++;
-        return this.rawTokens[this.i];
+        return this.rawTokens[this.i - 1];
     }
     hasNext() {
-        return this.i + 1 < this.rawTokens.length;
+        return this.i < this.rawTokens.length;
     }
     tokenType() {
-        return this.tokens[this.i];
+        return this.tokensNoEOL[this.i - 1];
     }
     lex() {
         const matches = [...this.expr.matchAll(this.lexerRegex)];
         this.rawTokens = matches;
         this.tokens = [];
+        this.tokensNoEOL = [];
         let lineN = 1;
         this.rawTokens.forEach((match, j) => {
-            console.log(match[0].includes("\n"));
             (match[0].includes("\n") ? match[0].match(/\n/g) : []).forEach(() => {
                 this.tokens.push(TokenType.EOL);
                 lineN++;
@@ -89,6 +90,9 @@ class Lexer {
             else if (match[22] !== undefined) {
                 throw new Error(`Line ${lineN}: Unexpected token '${match[0]}'`);
             }
+            const last = this.tokens[this.tokens.length - 1];
+            if (last !== TokenType.EOL)
+                this.tokensNoEOL.push(last);
         });
         console.log(this.tokens);
     }
@@ -103,8 +107,9 @@ export default class Parser {
     }
     parse() {
         while (this.lexer.hasNext()) {
-            const token = this.lexer.getNext();
+            const token = this.lexer.getNext()[0];
             const tokenType = this.lexer.tokenType();
+            console.log(token, tokenType);
         }
     }
 }
