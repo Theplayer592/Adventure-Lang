@@ -1,3 +1,4 @@
+import declareVar from "./keywords/var.js";
 var TokenType;
 (function (TokenType) {
     TokenType[TokenType["NUL"] = 0] = "NUL";
@@ -8,10 +9,9 @@ var TokenType;
     TokenType[TokenType["VAR"] = 5] = "VAR";
     TokenType[TokenType["ARRAY"] = 6] = "ARRAY";
     TokenType[TokenType["OBJ"] = 7] = "OBJ";
-    TokenType[TokenType["COMMENT"] = 8] = "COMMENT";
-    TokenType[TokenType["OPERATOR"] = 9] = "OPERATOR";
-    TokenType[TokenType["NUM"] = 10] = "NUM";
-    TokenType[TokenType["EOL"] = 11] = "EOL";
+    TokenType[TokenType["OPERATOR"] = 8] = "OPERATOR";
+    TokenType[TokenType["NUM"] = 9] = "NUM";
+    TokenType[TokenType["EOL"] = 10] = "EOL";
 })(TokenType || (TokenType = {}));
 class Value {
 }
@@ -23,15 +23,21 @@ class TreeNode {
     }
 }
 class Lexer {
+    lineN;
     expr;
     rawTokens;
     tokens;
-    tokensNoEOL;
     i;
-    lexerRegex = /(null)|(true|false)|((\"(\\.|[^\"\\])*\")|(\'(\\.|[^'\\])*\'))|(([a-zA-Z][a-zA-Z0-9_]*)\s*(\((?:[^)(]+|\((?:[^)(]+|\([^)(]*\))*\))*\)))|(global|path|prompt|print|end|run|entity|property|value|max|min|create|spawn|kill|if|elif|else|while|var|const)|(\[([^]*)\])|(\{([^]*)\})|([a-zA-Z][a-zA-Z0-9_]*)|(\/\*[^*]*\*+(?:[^/*][^*]*\*+)*\/|#.*)|(==|!=|>=|<=|\*\*|&&|\|\||!|>|<|=|%|\+|-|\*)|([+\-]?([0-9]+([.][0-9]*)?|[.][0-9]+))|(\S+)/gm;
+    j;
+    lexerRegex = /(null)|(true|false)|((\"(\\.|[^\"\\])*\")|(\'(\\.|[^'\\])*\'))|(([a-zA-Z][a-zA-Z0-9_]*)\s*(\((?:[^)(]+|\((?:[^)(]+|\([^)(]*\))*\))*\)))|(global|path|prompt|print|end|run|entity|property|value|max|min|create|spawn|kill|if|elif|else|while|var|const)|(\[([^]*)\])|(\{([^]*)\})|([a-zA-Z][a-zA-Z0-9_]*)|(\/\*[^*]*\*+(?:[^/*][^*]*\*+)*\/|#.*)|(==|!=|>=|<=|\*\*|&&|\|\||!|>|<|=|%|\+|-|\*)|([+\-]?([0-9]+([.][0-9]*)?|[.][0-9]+))|(\S+)|(\n)/gm;
     constructor(expression) {
         this.expr = expression;
         this.i = 0;
+        this.j = 0;
+        this.lineN = 1;
+    }
+    getLine() {
+        return this.lineN;
     }
     getNext() {
         this.i++;
@@ -41,13 +47,17 @@ class Lexer {
         return this.i < this.rawTokens.length;
     }
     tokenType() {
-        return this.tokensNoEOL[this.i - 1];
+        this.j++;
+        while (this.tokens[this.j - 1] === TokenType.EOL) {
+            this.j++;
+            this.lineN++;
+        }
+        return this.tokens[this.j - 1];
     }
     lex() {
         const matches = [...this.expr.matchAll(this.lexerRegex)];
         this.rawTokens = matches;
         this.tokens = [];
-        this.tokensNoEOL = [];
         let lineN = 1;
         this.rawTokens.forEach((match, j) => {
             (match[0].includes("\n") ? match[0].match(/\n/g) : []).forEach(() => {
@@ -79,7 +89,6 @@ class Lexer {
                 this.tokens.push(TokenType.VAR);
             }
             else if (match[17] !== undefined) {
-                this.tokens.push(TokenType.COMMENT);
             }
             else if (match[18] !== undefined) {
                 this.tokens.push(TokenType.OPERATOR);
@@ -90,16 +99,17 @@ class Lexer {
             else if (match[22] !== undefined) {
                 throw new Error(`Line ${lineN}: Unexpected token '${match[0]}'`);
             }
-            const last = this.tokens[this.tokens.length - 1];
-            if (last !== TokenType.EOL)
-                this.tokensNoEOL.push(last);
+        });
+        this.rawTokens = this.rawTokens.filter((v, i) => {
+            if (v[23] !== undefined)
+                return false;
+            return true;
         });
         console.log(this.tokens);
     }
 }
-export default class Parser {
+export class Parser {
     lexer;
-    lineN;
     constructor(expr, startingLine = 1, trace = []) {
         this.lexer = new Lexer(expr);
         this.lexer.lex();
@@ -107,9 +117,16 @@ export default class Parser {
     }
     parse() {
         while (this.lexer.hasNext()) {
-            const token = this.lexer.getNext()[0];
+            const token = this.lexer.getNext()[0].trim();
             const tokenType = this.lexer.tokenType();
             console.log(token, tokenType);
+            if (tokenType === TokenType.KEYWORD) {
+                switch (token) {
+                    case "var":
+                        declareVar(this);
+                }
+            }
         }
     }
 }
+export { TokenType };
