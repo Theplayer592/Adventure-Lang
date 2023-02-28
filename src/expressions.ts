@@ -1,8 +1,64 @@
 import { Lexer, TokenType } from "./parser.js"
 
-const ops1 = {}
-const ops2 = {}
-const funcs = {}
+function toRadians(deg: number) {
+    return deg * (Math.PI / 180)
+}
+
+const ops1 = {
+    "sin": Math.sin,
+    "cos": Math.cos,
+    "tan": Math.tan,
+    "asin": Math.asin,
+    "acos": Math.acos,
+    "atan": Math.atan,
+
+    "sind": (n) => { Math.sin(toRadians(n)) },
+    "cosd": (n) => { Math.cos(toRadians(n)) },
+    "tand": (n) => { Math.tan(toRadians(n)) },
+    "asind": (n) => { Math.asin(toRadians(n)) },
+    "acosd": (n) => { Math.asin(toRadians(n)) },
+    "atand": (n) => { Math.atan(toRadians(n)) },
+
+    "sqrt": Math.sqrt,
+    "abs": Math.abs,
+    "ceil": Math.ceil,
+    "floor": Math.floor,
+    "round": Math.round,
+    "-": (n) => { return -n },
+    "!": (n) => { return !n },
+    "exp": Math.exp
+}
+const ops2 = {
+    "+": (n1, n2) => { return n1 + n2 },
+    "-": (n1, n2) => { return n1 - n2 },
+    "*": (n1, n2) => { return n1 * n2 },
+    "/": (n1, n2) => { return n1 / n2 },
+    "%": (n1, n2) => { return n1 % n2 },
+    "^": (n1, n2) => { return Math.pow(n1, n2) },
+    "**": (n1, n2) => { return Math.pow(n1, n2) },
+    "==": (n1, n2) => { return n1 === n2 },
+    "!=": (n1, n2) => { return n1 !== n2 },
+    ">": (n1, n2) => { return n1 > n2 },
+    "<": (n1, n2) => { return n1 < n2 },
+    ">=": (n1, n2) => { return n1 >= n2 },
+    "<=": (n1, n2) => { return n1 <= n2 },
+    "&&": (n1, n2) => { return n1 && n2 },
+    "||": (n1, n2) => { return n1 || n2 },
+    "in": (n1, n2) => { return n1 in n2 },
+}
+const funcs = {
+    // Maximum will be exclusive and minimum inclusive
+    "ran": (minMax, minMax2: number =null) => { 
+        const min = Math.ceil(minMax2 === null ? 0 : minMax)
+        const max = Math.floor(minMax2 === null ? minMax : minMax2)
+        return Math.floor(Math.random() * (max - min) + min)
+    },
+    "log": Math.log
+}
+const consts = {
+    "e": Math.E,
+    "pi": Math.PI
+}
 
 enum ExprTokenType {
     NUM,
@@ -12,14 +68,26 @@ enum ExprTokenType {
     FNCALL
 }
 
+enum ParseTokenType {
+    PRIMARY,
+    OP,
+    FN,
+    LP,
+    RP,
+    COMMA,
+    SIGN,
+    CALL,
+    NUL_CALL
+}
+
 class Token {
     private type: ExprTokenType
-    private index: string
-    private prio: string
-    private num: number | string
+    private index
+    private prio
+    private num
     private lexer: Lexer
 
-    constructor(lexer, type, index = "0", prio = "0", num: number | string = 0) {
+    constructor(lexer, type, index = "0", prio = "0", num = 0) {
         this.lexer = lexer
         this.type = type
         this.index = index
@@ -42,7 +110,7 @@ class Token {
         }
     }
 
-    public getNum(): string | number {
+    public getNum() {
         return this.num
     }
 
@@ -50,11 +118,11 @@ class Token {
         return this.type
     }
 
-    public getIndex(): string {
+    public getIndex() {
         return this.index
     }
 
-    public getPrio(): string {
+    public getPrio() {
         return this.prio
     }
 
@@ -181,20 +249,95 @@ class Expression {
         this.tokens.forEach((token, i) => {
             const type = token.getType()
             switch(type) {
-                case ExprTokenType.NUM:
+                case ExprTokenType.NUM: {
                     if(typeof token.getNum() === "string") {
                         stack.push("'" + token.getNum() + "'")
                     } else {
                         stack.push(token.getNum())
                     }
+                }
+                case ExprTokenType.OP2: {
+                    const n2 = stack.pop()
+                    const n1 = stack.pop()
+                    const op = token.getIndex()
+                    if(op === "^") {
+                        stack.push(`math.pow(${n1}, ${n2})`)
+                    } else {
+                        stack.push(op === "," ? `${n1}${op}${n2}` : `(${n1}${op}${n2})`)
+                    }
+                }
+                case ExprTokenType.VAR: {
+                    stack.push(token.getIndex())
+                }
+                case ExprTokenType.OP1: {
+                    const n1 = stack.pop()
+                    const op = token.getIndex()
+                    stack.push(op === "-" ? `(${op}${n1})` : `${op}(${n1})`)
+                }
+                case ExprTokenType.FNCALL: {
+                    const n1 = stack.pop()
+                    const fn = stack.pop()
+                    stack.push(`${fn}(${n1})`)
+                }
+                default:
+                    throw new Error(`Line ${token.getLexer().getLine()}: Invalid expression`)
             }
         })
-        return ""
+
+        if(stack.length > 1) {
+            throw new Error(`Line ${this.tokens[this.tokens.length - 1].getLexer().getLine()}: Cannot resolve expression`)
+        }
+
+        return stack[0]
+    }
+
+    private symbols(): string[] {
+        let vars: string[] = []
+
+        this.tokens.forEach((token) => {
+            if(token.getType() === ExprTokenType.VAR && token.getIndex() !in vars) vars.push(token.getIndex())
+        })
+
+        return vars
+    }
+
+    private getVars() {
+        return [...this.symbols()]
     }
 }
 
 class Parser {
+    private success: boolean = false
+    private errrmsg: string = ""
+    private expr: string = ""
+
+    private pos: number = 0
+
+    private tokenN = 0
+    private tokenPrio: any = "0"
+    private tokenI: any = "0"
+    private tempPrio: any = "0"
+
+    constructor() {
+        const strQuotes = ["'", "\""]
+
+        
+    }
+
     public parse(expr: string): Expression {
+        this.success = true
+        this.tempPrio = 0
+        this.expr = expr
+        this.pos = 0
+
+        let opstack = []
+        let tokenstack = []
+        let ops = 0
+
+        const expected = ParseTokenType.PRIMARY | ParseTokenType.LP | ParseTokenType.FN | ParseTokenType.SIGN
+        
+        // PLACEHOLDER
         return new Expression([])
     }
+
 }
